@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="hy">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ինտելեկտուալ Խաղ - Երրորդ Խաղ</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Armenian:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Firebase JS SDK (Compat Build - grafik-system) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans Armenian', sans-serif;
+            background-color: #0f172a; /* slate-900 */
+            color: #f8fafc; /* slate-50 */
+            margin: 0;
+            overflow: hidden;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        #slide-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100vw;
+            height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
+        }
+
+        .fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .clue-item {
+            transition: all 0.3s ease;
+        }
+        .clue-muted {
+            opacity: 0.85;
+        }
+        .clue-active {
+            opacity: 1;
+            transform: scale(1.02);
+            border-color: #38bdf8 !important; /* sky-400 */
+            background-color: rgba(56, 189, 248, 0.1) !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- STARTUP CONNECTION MODAL (Մեծ էկրան կամ Հեռախոս) -->
+    <div id="connection-modal" class="fixed inset-0 z-[100] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+        <div class="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-3xl p-6 md:p-8 shadow-2xl text-center">
+            <div class="inline-block px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-sm font-bold tracking-wider uppercase mb-4">
+                Երրորդ Խաղ • Համաժամեցում
+            </div>
+            <h2 class="text-2xl md:text-3xl font-black text-white mb-6">Ընտրեք սարքի ռեժիմը</h2>
+
+            <!-- Option 1: Big Screen -->
+            <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 mb-4">
+                <div class="flex items-center justify-center gap-3 text-blue-400 font-bold text-lg mb-2">
+                    <i class="fa-solid fa-tv text-xl"></i>
+                    <span>Տարբերակ 1. Մեծ Էկրան</span>
+                </div>
+                <p class="text-slate-400 text-sm mb-4">Բացեք համակարգչի կամ պրոյեկտորի վրա՝ 4-նիշ կոդ ստանալու համար</p>
+                <button onclick="startAsScreen()" class="w-full py-3.5 px-6 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-[0.99] text-white font-bold text-lg transition shadow-lg shadow-blue-900/40">
+                    🖥️ Բացել Մեծ Էկրանին
+                </button>
+            </div>
+
+            <!-- Option 2: Mobile Remote -->
+            <div class="bg-slate-800/80 border border-slate-700 rounded-2xl p-5 mb-4">
+                <div class="flex items-center justify-center gap-3 text-emerald-400 font-bold text-lg mb-2">
+                    <i class="fa-solid fa-mobile-screen-button text-xl"></i>
+                    <span>Տարբերակ 2. Հեռախոս (Պուլտ)</span>
+                </div>
+                <p class="text-slate-400 text-sm mb-4">Մուտքագրեք մեծ էկրանին երևացող 4-նիշ կոդը</p>
+                <div class="flex gap-2">
+                    <input type="text" id="remote-room-code" maxlength="4" inputmode="numeric" pattern="[0-9]*" placeholder="4-նիշ ID"
+                        class="w-1/2 bg-slate-950 border border-slate-600 focus:border-emerald-400 rounded-xl px-4 py-3 text-center text-2xl font-black tracking-widest text-amber-400 outline-none">
+                    <button onclick="startAsRemote()" class="w-1/2 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-[0.99] text-white font-bold text-lg transition shadow-lg shadow-emerald-900/40">
+                        🔗 Միանալ
+                    </button>
+                </div>
+            </div>
+
+            <!-- Option 3: Offline Local Mode -->
+            <button onclick="startLocalOnly()" class="text-slate-400 hover:text-white text-sm underline transition mt-1">
+                Շարունակել առանց միացման (միայն այս սարքով)
+            </button>
+        </div>
+    </div>
+
+    <!-- ROOM BADGE FOR BIG SCREEN (Top-Right, click to hide/show) -->
+    <div id="screen-room-badge" onclick="toggleBadgeOpacity()" title="Սեղմեք՝ թաքցնելու կամ ցուցադրելու համար"
+        class="hidden fixed top-4 right-6 z-50 cursor-pointer bg-slate-800/90 hover:bg-slate-800 border border-slate-700 px-4 py-2 rounded-full flex items-center gap-2.5 shadow-lg transition">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span class="text-slate-400 text-sm font-semibold">ID:</span>
+        <span id="badge-room-code" class="text-amber-400 font-black text-lg tracking-widest">----</span>
+    </div>
+
+    <!-- PHONE REMOTE CONTROLLER UI -->
+    <div id="remote-panel" class="hidden fixed inset-0 z-40 bg-slate-950 flex flex-col justify-between p-4 overflow-y-auto">
+        <!-- Top Bar -->
+        <div class="flex items-center justify-between bg-slate-900 border border-slate-800 rounded-2xl px-4 py-3">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-slate-400 text-sm font-bold">Սենյակ՝</span>
+                <span id="remote-display-code" class="text-amber-400 font-black text-lg tracking-widest">----</span>
+            </div>
+            <div id="remote-progress" class="bg-slate-800 text-white font-bold px-3 py-1 rounded-lg text-sm">
+                1 / 1
+            </div>
+        </div>
+
+        <!-- Current Slide Info & Moderator Preview -->
+        <div class="my-3 flex-grow flex flex-col justify-center gap-3">
+            <!-- Slide Jump Selector -->
+            <div>
+                <label class="block text-xs text-slate-400 font-semibold mb-1 uppercase tracking-wider">Արագ անցում սլայդին.</label>
+                <select id="remote-slide-select" onchange="jumpToSlide(this.value)"
+                    class="w-full bg-slate-900 border border-slate-700 text-white rounded-xl px-3 py-2.5 text-sm font-semibold outline-none focus:border-blue-500">
+                </select>
+            </div>
+
+            <!-- Current Screen Preview Card -->
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-inner">
+                <div class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1" id="remote-slide-type">Էկրանին հիմա</div>
+                <div class="text-base font-bold text-white leading-snug max-h-40 overflow-y-auto" id="remote-slide-preview">
+                    Բեռնվում է...
+                </div>
+            </div>
+
+            <!-- Moderator Secret Hint / Answer Box -->
+            <div id="remote-moderator-box" class="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
+                <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1">
+                    <i class="fa-solid fa-eye mr-1"></i> Վարողի հուշում (մեծ էկրանին չի երևում)
+                </div>
+                <div class="text-base font-black text-amber-300" id="remote-moderator-answer">
+                    —
+                </div>
+            </div>
+        </div>
+
+        <!-- Big Touch Controls -->
+        <div class="grid grid-cols-2 gap-3 pt-2">
+            <button onclick="prevSlide()" class="py-5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 text-white font-black text-xl border border-slate-700 flex items-center justify-center gap-2 shadow-lg">
+                <i class="fa-solid fa-chevron-left"></i>
+                <span>Նախորդ</span>
+            </button>
+            <button onclick="nextSlide()" class="py-5 rounded-2xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-black text-xl border border-blue-500 flex items-center justify-center gap-2 shadow-lg shadow-blue-900/40">
+                <span>Հաջորդ</span>
+                <i class="fa-solid fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content Area (BIG SCREEN PRESENTATION) -->
+    <div id="slide-container">
+        <!-- Content injected by JS -->
+    </div>
+
+    <!-- UI Controls (Big Screen Bottom-Right) -->
+    <div id="screen-controls" class="fixed bottom-4 right-6 flex items-center gap-3 z-30">
+        <span id="progress" class="text-slate-500 font-semibold text-base mr-2">1 / 1</span>
+        
+        <button onclick="toggleFullScreen()" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition shadow-lg border border-slate-700 focus:outline-none" title="Ամբողջ էկրան">
+            <i class="fa-solid fa-expand text-base"></i>
+        </button>
+        
+        <button onclick="prevSlide()" class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-800 hover:bg-slate-700 text-white transition shadow-lg border border-slate-700 focus:outline-none" title="Նախորդ (Ձախ սլաք)">
+            <i class="fa-solid fa-chevron-left text-lg"></i>
+        </button>
+        
+        <button onclick="nextSlide()" class="w-12 h-12 flex items-center justify-center rounded-full bg-blue-600 hover:bg-blue-500 text-white transition shadow-lg shadow-blue-900/50 border border-blue-500 focus:outline-none" title="Հաջորդ (Աջ սլաք կամ Space)">
+            <i class="fa-solid fa-chevron-right text-xl"></i>
+        </button>
+    </div>
+
+    <script>
+        // --- FIREBASE CONFIG (grafik-system) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyD_hv1sGX_Q8KFIa26Id-aiZZg2wNUUmwE",
+            authDomain: "grafik-system-554ec.firebaseapp.com",
+            databaseURL: "https://grafik-system-554ec-default-rtdb.firebaseio.com",
+            projectId: "grafik-system-554ec",
+            storageBucket: "grafik-system-554ec.firebasestorage.app",
+            messagingSenderId: "171412577503",
+            appId: "1:171412577503:web:be43cb5047d811cf7a9d6a",
+            measurementId: "G-TWWYGVHJZY"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        let roomRef = null;
+        let appMode = 'local'; // 'screen' | 'remote' | 'local'
+        let badgeDimmed = false;
+
+        // --- ՏՎՅԱԼՆԵՐԻ ԲԱԶԱ (ԽԱՂԻ ԲՈՎԱՆԴԱԿՈՒԹՅՈՒՆ) ---
+        const round1 = [
+            { q: "Դիսնեյի այս մուլտլֆիլմում նա ամբողջ ֆիլմի ընթացքում էկրանին երևում է ընդամենը 18 րոպե և արտասանում է ընդամենը 18 նախադասություն, չնայած ֆիլմը կոչվում է նրա անունով։ Ո՞ր մուլտֆիլմն է դա։", a: "Քնած գեղեցկուհին" },
+            { q: "Այդ բառը ծագել է հին հունական դիցաբանական կերպարի՝ Պան աստծո անունից։ Ըստ լեգենդի՝ նա անսպասելիորեն դուրս էր գալիս անտառից և արձակում այնպիսի ձայն, որը մարդկանց մեջ առաջացնում էր անկառավարելի վախ։ Ո՞ր բառի մասին է խոսքը։", a: "Խուճապ (Պանիկա)" },
+            { q: "Այս նոր գյուտը իր վրա փորձարկելով և տեսնելով արդյունքը՝ Աննա Բերտան ասաց, որ ինքը տեսավ սեփական մահը։ Ի՞նչ գյուտի մասին է խոսքը։", a: "Ռենտգեն (X-ray)" },
+            { q: "1925 թվականին խաբեբա Վիկտոր Լյուստիգը հսկայական գումարի դիմաց գործարք կնքեց ջարդոնի վերամշակմամբ զբաղվող ընկերության հետ։ Սակայն ստանալով գումարը՝ Լյուստիգը փախավ երկրից, իսկ տուժած ընկերության ներկայացուցիչները ամոթից ոստիկանություն չդիմեցին։ Ի՞նչ էր վաճառել Լյուստիգը։", a: "Էյֆելյան աշտարակը" },
+            { q: "Մի մարդ իր Լոնդոնում գտնվող տունը վաճառում էր շատ ցածր գնով, թեև տունը լավ վիճակում էր, գնորդները զարմանում էին։ Պարզվեց՝ տան առանձնահատկությունը կապված էր ոչ թե շենքի, այլ ԺԱՄԱՆԱԿԻ հետ։ Ի՞նչն էր խնդիրը։", a: "Գտնվում էր Բիգ Բենի հարևանությամբ, որի ձայնը խանգարում էր" },
+            { q: "Բանվորական շարժումների ժամանակ ֆրանսիացի տեքստիլագործները հաճախ կոտրում էին գործարանային հաստոցները՝ դրանց մեխանիզմների մեջ գցելով իրենց ավանդական փայտե կոշիկները։ Այս կոշիկների ֆրանսերեն անվանումից էլ առաջացել է մի միջազգային բառ, որն այսօր նշանակում է գործընթացի կանխամտածված ձախողում կամ վնասարարություն։ Ո՞ր բառն է դա։", a: "Սաբոտաժ" },
+            { q: "Միջնադարյան Ռուսիայում իրականացված դրամական ռեֆորմի ժամանակ շրջանառության մեջ դրվեց մի նոր մետաղադրամ։ Դրա վրա պատկերված էր ձիավոր, որը ձեռքում պահում էր մի զենք։ Հենց այդ զենքի անվանումից էլ առաջացավ մետաղադրամի անունը, որը մենք օգտագործում ենք մինչ օրս։ Ո՞ր զենքի մասին է խոսքը։", a: "Նիզակ (Копье - Копейка)" },
+            { q: "«Երեք հրացանակիրները» վեպի հեղինակ Ալեքսանդր Դյուման մի անգամ վիճեց մի բժշկի հետ, և նրանք որոշեցին մենամարտել ատրճանակներով։ Վիճակը ընկավ Դյումային, որ նա ինքնասպան լինի։ Նա մտավ սենյակ, դուռը փակեց, և լսվեց կրակոցի ձայն։ Ներս վազողները տեսան ողջ Դյումային։ Ի՞նչ ասաց Դյուման ներս մտնողներին։", a: "«Ես կրակեցի ինձ վրա, բայց վրիպեցի»" },
+            { q: "Խաղաթղթերի ստանդարտ տուփը պարունակում է 52 քարտ, իսկ կայմերը 4-ն են։ Ըստ տարածված տեսության՝ ի՞նչ բնական երևույթների հետ են կապված 52 քարտերն ու 4 կայմերը։", a: "Տարվա 52 շաբաթները և 4 եղանակները" },
+            { q: "Մորզեի այբուբենում այն ունի հետևյալ տեսքը ···−−−···, կարող եք ասել ինչ է այն նշանակում։", a: "SOS" },
+            { q: "Այդ լայն տարածում ունեցող իրն առաջին համաշխարհային պատերազմի ժամանակ խիստ վտանգավոր էր գրպանից հանելը խրամատներում թաքնվելու ժամանակ, ուստի բրիտանացի զինվորները սկսեցին այն այլ կերպ պահել, ո՞ր իրի մասին է խոսքը։", a: "Գրպանի ժամացույց (սկսեցին կրել ձեռքին)" },
+            { q: "1960-ականներին ստեղված այս իրը նախատեսված էր աշխարհագրության դասերին օգտագործելու համար, սակայն այսօր այն ամենաշատը կիրառվում է մաթեմատիկայի դասերին։ Ինչի՞ մասին է խոսքը։", a: "Ջնջվող մարկեր" }
+        ];
+
+        const round2 = [
+            {
+                topic: "Թեմա 1",
+                clues: [
+                    "Այս երկրի դրոշը համարվում է աշխարհում ամենահին անընդմեջ օգտագործվող ազգային դրոշը (ընդունվել է դեռևս 13-րդ դարում)։",
+                    "Այս երկիրը բաղկացած է մեկ մեծ թերակղզուց և ավելի քան 400 կղզիներից, որոնցից բնակեցված են միայն մոտ 70-ը։",
+                    "Աշխարհի ամենամեծ կղզին հանդիսանում է հենց այս երկրի ինքնավար տարածք։",
+                    "Այս երկրում է ծնվել համաշխարհային ճանաչում ունեցող հեքիաթագիր Հանս Քրիստիան Անդերսենը։",
+                    "Այս երկիրը հայտնի կոնստրուկտորների՝ LEGO խաղալիքների ապրանքանիշի հայրենիքն է։"
+                ],
+                answer: "ԴԱՆԻԱ"
+            },
+            {
+                topic: "Թեմա 2",
+                clues: [
+                    "Ենթադրվում է, որ սրանք առաջացել են Չինաստանում Տան դինաստիայի ժամանակ՝ մոտ 9-րդ դարում։",
+                    "14-րդ դարում դրանք Եվրոպա են հասել Եգիպտոսի Մամլուքների սուլթանությունից և արագորեն տարածում գտել։",
+                    "Ժամանակակից ստանդարտ հավաքածույում դրանք 52-ն են, ինչը շատերը կապում են տարվա 52 շաբաթների հետ։",
+                    "Դրանք բաժանված են 4 հիմնական «երանգների», որոնք էլ խորհրդանշում են տարվա չորս եղանակները։",
+                    "Դրանց մեջ կան հատուկ դեմքեր՝ զինվոր, թագուհի և թագավոր, և դրանք օգտագործվում են այնպիսի խաղերում, ինչպիսիք են Պոկերն ու Բլեքջեքը։"
+                ],
+                answer: "ԽԱՂԱՔԱՐՏԵՐ"
+            },
+            {
+                topic: "Թեմա 3",
+                clues: [
+                    "Մ.թ.ա. մոտ 530 թվականին նա փիլիսոփայական և կրոնական գաղտնի դպրոց է հիմնել հարավային Իտալիայի Կրոտոն քաղաքում։",
+                    "Նրա հետևորդները խիստ բուսակեր էին և հավատում էին հոգիների վերաբնակեցմանը (ռեինկարնացիային)։",
+                    "Նրան հաճախ վերագրում են այն երաժշտական նոտաների հայտնագործությունը։",
+                    "Նա հին հույն հայտնի փիլիսոփա և մաթեմատիկոս էր՝ ծնված Սամոս կղզում։",
+                    "Նա առավել հայտնի է ուղղանկյուն եռանկյունների կողմերի մասին իր հայտնի թեորեմով։"
+                ],
+                answer: "ՊՅՈՒԹԱԳՈՐԱՍ"
+            },
+            {
+                topic: "Թեմա 4",
+                clues: [
+                    "Դրա անվանումը ծագում է սանսկրիտից և մալայերենից, ինչը թարգմանաբար նշանակում է «Առյուծի քաղաք», թեև այնտեղ բնության մեջ առյուծներ երբեք չեն ապրել։",
+                    "Այն աշխարհում պահպանված ընդամենը երեք ինքնիշխան քաղաք-պետություններից մեկն է։",
+                    "Այն հայտնի է իր անչափ խիստ օրենքներով, օրինակ՝ այնտեղ խստորեն արգելված է մաստակի վաճառքն ու ներմուծումը։",
+                    "Դրա գլխավոր ժամանակակից խորհրդանիշներից է շքեղ հյուրանոցային համալիրը, որը բաղկացած է երեք աշտարակներից՝ վերևում միացված նավի տեսք ունեցող կառույցով։",
+                    "Այն զարգացած ասիական երկիր է, որը գտնվում է Մալակկա թերակղզու հարավային ծայրում։"
+                ],
+                answer: "ՍԻՆԳԱՊՈՒՐ"
+            },
+            {
+                topic: "Թեմա 5",
+                clues: [
+                    "1999 թվականին Միջազգային օլիմպիական կոմիտեի կողմից նա ճանաչվել է դարի լավագույն մարզիկ։",
+                    "Նրա իսկական անունը Էդսոն Արանտիս դու Նասիմենտու է, և նրան այդպես են անվանել ի պատիվ հայտնի գյուտարար Թոմաս Էդիսոնի։",
+                    "Նա իր ակումբային կարիերայի գրեթե ողջ ընթացքում (գրեթե 20 տարի) խաղացել է մեկ ակումբում՝ բրազիլական «Սանթոսում»։",
+                    "Նա ֆուտբոլի պատմության մեջ միակ խաղացողն է, ով երեք անգամ նվաճել է աշխարհի առաջնության գավաթը (1958, 1962, 1970 թթ․)։",
+                    "Նրան աշխարհում հաճախ անվանում են «Ֆուտբոլի արքա»․ նա բրազիլացի լեգենդար հարձակվող էր։"
+                ],
+                answer: "ՊԵԼԵ"
+            }
+        ];
+
+        // --- ՍԼԱՅԴՆԵՐԻ ԳԵՆԵՐԱՑՈՒՄ ---
+        let slides = [];
+
+        // Main Title
+        slides.push({
+            type: 'title',
+            label: 'Գլխավոր էջ — Երրորդ Խաղ',
+            preview: 'Գլխավոր մեկնարկային էկրան',
+            moderatorHint: 'Հաջորդ սլայդը՝ Առաջին փուլի ներածություն',
+            content: `
+                <div class="text-center fade-in">
+                    <div class="inline-block px-6 py-2 rounded-full border-2 border-amber-500/30 bg-amber-500/10 text-amber-400 font-bold tracking-widest uppercase mb-8">Ինտելեկտուալ Առաջնություն</div>
+                    <h1 class="text-6xl md:text-8xl font-black text-white mb-6 tracking-tight">ԵՐՐՈՐԴ ԽԱՂ</h1>
+                    <div class="w-32 h-1 bg-amber-500 mx-auto rounded-full mb-8"></div>
+                    <p class="text-2xl text-slate-400 font-semibold">Սեղմեք <span class="text-white bg-slate-800 px-3 py-1 rounded mx-1 shadow">Space</span> կամ աջ սլաքը խաղը սկսելու համար</p>
+                </div>
+            `
+        });
+
+        // Round 1 Intro
+        slides.push({
+            type: 'intro',
+            label: 'Փուլ 1 — Ներածություն',
+            preview: 'Առաջին Փուլ • Ի՞նչ, Որտե՞ղ, Ե՞րբ (12 հարց)',
+            moderatorHint: 'Հաջորդ սլայդը՝ Հարց 1',
+            content: `
+                <div class="text-center fade-in max-w-4xl">
+                    <div class="w-24 h-24 bg-blue-600/20 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-8 border border-blue-500/30">
+                        <i class="fa-solid fa-brain text-5xl"></i>
+                    </div>
+                    <h3 class="text-3xl text-blue-400 font-bold uppercase tracking-widest mb-4">Առաջին Փուլ</h3>
+                    <h2 class="text-6xl md:text-7xl font-black text-white mb-8">Ի՞նչ, Որտե՞ղ, Ե՞րբ</h2>
+                    <p class="text-2xl text-slate-300 bg-slate-800/50 p-6 rounded-2xl border border-slate-700/50 shadow-xl">Ընդհանուր՝ <span class="text-amber-400 font-bold">12 հարց</span><br><span class="text-lg text-slate-400 mt-2 block">Յուրաքանչյուր ճիշտ պատասխան բերում է 1 միավոր</span></p>
+                </div>
+            `
+        });
+
+        // Generate Round 1 Slides (Q -> A)
+        round1.forEach((item, index) => {
+            // Question
+            slides.push({
+                type: 'q',
+                label: `Փուլ 1 • Հարց ${index + 1}`,
+                preview: `Հարց ${index + 1}: ${item.q}`,
+                moderatorHint: `Պատասխան՝ ${item.a}`,
+                content: `
+                    <div class="w-full max-w-6xl fade-in flex flex-col h-full justify-center">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-6 mb-12">
+                            <span class="text-2xl font-black text-blue-500 tracking-wider">ՀԱՐՑ ${index + 1}</span>
+                            <span class="text-lg font-semibold text-slate-500 uppercase tracking-widest">Փուլ 1 • Ի՞նչ, որտե՞ղ, ե՞րբ</span>
+                        </div>
+                        <div class="flex-grow flex flex-col justify-center items-center text-center">
+                            <h2 class="text-4xl md:text-5xl font-bold text-white leading-tight md:leading-tight max-w-5xl mx-auto mb-12">
+                                ${item.q.replace(/Ո՞ր |Ի՞նչ |Ինչի՞ |Կարո՞ղ /g, match => `<span class="text-amber-400">${match}</span>`)}
+                            </h2>
+                            <div class="inline-flex items-center gap-3 text-slate-400 bg-slate-800/40 px-6 py-3 rounded-full border border-slate-700">
+                                <i class="fa-regular fa-clock text-xl"></i>
+                                <span class="text-lg font-medium">Քննարկման ժամանակ՝ 1 րոպե</span>
+                            </div>
+                        </div>
+                    </div>
+                `
+            });
+            // Answer
+            slides.push({
+                type: 'a',
+                label: `Փուլ 1 • Պատասխան ${index + 1}`,
+                preview: `Պատասխան ${index + 1}: ${item.a}`,
+                moderatorHint: 'Պատասխանը արդեն ցուցադրված է էկրանին',
+                content: `
+                    <div class="w-full max-w-6xl fade-in flex flex-col h-full justify-center">
+                        <div class="flex items-center justify-between border-b border-slate-800 pb-6 mb-16">
+                            <span class="text-2xl font-black text-emerald-500 tracking-wider">ՊԱՏԱՍԽԱՆ ${index + 1}</span>
+                            <span class="text-lg font-semibold text-slate-500 uppercase tracking-widest">Փուլ 1 • Ի՞նչ, որտե՞ղ, ե՞րբ</span>
+                        </div>
+                        <div class="flex-grow flex flex-col justify-center items-center text-center">
+                            <h2 class="text-5xl md:text-7xl font-black text-emerald-400 leading-tight mb-8">
+                                ${item.a}
+                            </h2>
+                            <p class="text-xl text-slate-400 mt-8">Ճիշտ պատասխանող թիմերին՝ <span class="text-white font-bold">+1 միավոր</span></p>
+                        </div>
+                    </div>
+                `
+            });
+        });
+
+        // Round 2 Intro
+        slides.push({
+            type: 'intro',
+            label: 'Փուլ 2 — Փաստաշար (Ներածություն)',
+            preview: 'Երկրորդ Փուլ • ՓԱՍՏԱՇԱՐ (5 թեմա)',
+            moderatorHint: 'Հաջորդ սլայդը՝ Թեմա 1 (5 միավոր)',
+            content: `
+                <div class="text-center fade-in max-w-4xl">
+                    <div class="w-24 h-24 bg-emerald-600/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-8 border border-emerald-500/30">
+                        <i class="fa-solid fa-list-ol text-5xl"></i>
+                    </div>
+                    <h3 class="text-3xl text-emerald-400 font-bold uppercase tracking-widest mb-4">Երկրորդ Փուլ</h3>
+                    <h2 class="text-6xl md:text-8xl font-black text-white mb-8">ՓԱՍՏԱՇԱՐ</h2>
+                    <div class="text-2xl text-slate-300 bg-slate-800/50 p-8 rounded-3xl border border-slate-700/50 shadow-xl inline-block text-left">
+                        <ul class="space-y-4">
+                            <li><i class="fa-solid fa-check text-emerald-500 mr-3"></i> <span class="font-bold text-white">5 Թեմա</span></li>
+                            <li><i class="fa-solid fa-check text-emerald-500 mr-3"></i> Ամեն թեմա ունի <span class="text-amber-400 font-bold">5 հուշում</span></li>
+                            <li><i class="fa-solid fa-check text-emerald-500 mr-3"></i> Որքան շուտ գուշակեք, այնքան շատ միավոր կվաստակեք <span class="text-slate-400 text-lg">(5-ից մինչև 1)</span></li>
+                        </ul>
+                    </div>
+                </div>
+            `
+        });
+
+        // Generate Round 2 Slides (Topic clues cumulatively)
+        round2.forEach((topicObj) => {
+            const points = [5, 4, 3, 2, 1];
+            
+            for(let i = 0; i < 5; i++) {
+                let cluesHTML = '';
+                for(let j = 0; j <= i; j++) {
+                    const isLast = (j === i);
+                    const stateClass = isLast ? 'clue-active border-slate-500 bg-slate-700/80 shadow-lg' : 'clue-muted border-slate-700 bg-slate-800/70';
+                    const pointsColor = isLast ? 'bg-emerald-500 text-white shadow-md' : 'bg-slate-700 text-slate-200';
+                    
+                    cluesHTML += `
+                        <div class="clue-item flex items-start gap-6 p-5 rounded-2xl border ${stateClass} mb-4">
+                            <div class="flex-shrink-0 w-28 py-2 rounded-lg font-black text-center text-lg ${pointsColor}">
+                                ${points[j]} ՄԻԱՎՈՐ
+                            </div>
+                            <div class="text-xl md:text-2xl font-medium leading-relaxed ${isLast ? 'text-white' : 'text-slate-300'}">
+                                ${topicObj.clues[j]}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                slides.push({
+                    type: 'clue',
+                    label: `Փուլ 2 • ${topicObj.topic} (${points[i]} միավոր)`,
+                    preview: `${topicObj.topic} — Հուշում ${i + 1}/5 (${points[i]} միավոր): ${topicObj.clues[i]}`,
+                    moderatorHint: `Թեմայի պատասխանը՝ ${topicObj.answer}`,
+                    content: `
+                        <div class="w-full max-w-5xl fade-in flex flex-col h-full py-8">
+                            <div class="flex items-center justify-between border-b border-slate-800 pb-4 mb-8">
+                                <span class="text-2xl font-black text-emerald-400 uppercase tracking-widest">${topicObj.topic} • Փաստաշար</span>
+                                <div class="bg-slate-800 text-amber-400 font-bold px-5 py-2 rounded-full border border-slate-700">ԸՆԹԱՑԻԿ՝ ${points[i]} ՄԻԱՎՈՐ</div>
+                            </div>
+                            <div class="flex-grow flex flex-col justify-center">
+                                ${cluesHTML}
+                            </div>
+                        </div>
+                    `
+                });
+            }
+
+            // Topic Answer
+            slides.push({
+                type: 'clue-a',
+                label: `Փուլ 2 • ${topicObj.topic} (Պատասխան)`,
+                preview: `${topicObj.topic} • ՊԱՏԱՍԽԱՆ: ${topicObj.answer}`,
+                moderatorHint: 'Պատասխանը արդեն ցուցադրված է էկրանին',
+                content: `
+                    <div class="w-full max-w-5xl fade-in flex flex-col h-full justify-center text-center">
+                        <div class="mb-12">
+                            <span class="text-2xl font-black text-amber-500 tracking-wider">${topicObj.topic} • ՊԱՏԱՍԽԱՆ</span>
+                        </div>
+                        <h2 class="text-6xl md:text-8xl font-black text-amber-400 leading-tight mb-8 drop-shadow-lg">
+                            ${topicObj.answer}
+                        </h2>
+                        <div class="mt-8 text-slate-400 text-xl">
+                            Անցում հաջորդին...
+                        </div>
+                    </div>
+                `
+            });
+        });
+
+        // Game Over Slide
+        slides.push({
+            type: 'outro',
+            label: 'Խաղի Ավարտ',
+            preview: 'ԽԱՂՆ ԱՎԱՐՏՎԱԾ Է',
+            moderatorHint: 'Վերջին սլայդ',
+            content: `
+                <div class="text-center fade-in">
+                    <div class="w-32 h-32 bg-amber-500/20 text-amber-400 rounded-full flex items-center justify-center mx-auto mb-8 border-2 border-amber-500/50 shadow-[0_0_50px_rgba(245,158,11,0.2)]">
+                        <i class="fa-solid fa-trophy text-6xl"></i>
+                    </div>
+                    <h1 class="text-6xl md:text-8xl font-black text-white mb-6 tracking-tight">ԽԱՂՆ ԱՎԱՐՏՎԱԾ Է</h1>
+                    <div class="w-48 h-1 bg-emerald-500 mx-auto rounded-full mb-8"></div>
+                    <p class="text-3xl text-slate-300 font-medium">Շնորհակալություն մասնակցության համար</p>
+                </div>
+            `
+        });
+
+        // --- ՆԱՎԻԳԱՑԻԱ ԵՎ FIREBASE ՍԻՆԽՐՈՆԻԶԱՑԻԱ ---
+        let currentSlideIndex = 0;
+        const container = document.getElementById('slide-container');
+        const progressEl = document.getElementById('progress');
+
+        function populateRemoteSelect() {
+            const select = document.getElementById('remote-slide-select');
+            select.innerHTML = '';
+            slides.forEach((s, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                opt.innerText = `${idx + 1}. ${s.label}`;
+                select.appendChild(opt);
+            });
+        }
+
+        function renderSlide() {
+            const slide = slides[currentSlideIndex];
+
+            // Update Big Screen
+            container.innerHTML = slide.content;
+            progressEl.innerText = `${currentSlideIndex + 1} / ${slides.length}`;
+
+            // Update Phone Remote UI
+            document.getElementById('remote-progress').innerText = `${currentSlideIndex + 1} / ${slides.length}`;
+            document.getElementById('remote-slide-select').value = currentSlideIndex;
+            document.getElementById('remote-slide-type').innerText = slide.label;
+            document.getElementById('remote-slide-preview').innerText = slide.preview;
+            document.getElementById('remote-moderator-answer').innerText = slide.moderatorHint;
+
+            if (document.activeElement) {
+                document.activeElement.blur();
+            }
+        }
+
+        function syncSlideIndex(newIndex) {
+            if (newIndex < 0 || newIndex >= slides.length) return;
+            currentSlideIndex = newIndex;
+            renderSlide();
+
+            if (roomRef) {
+                roomRef.update({
+                    currentSlideIndex: currentSlideIndex,
+                    updatedAt: Date.now()
+                });
+            }
+        }
+
+        function nextSlide() {
+            if (currentSlideIndex < slides.length - 1) {
+                syncSlideIndex(currentSlideIndex + 1);
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlideIndex > 0) {
+                syncSlideIndex(currentSlideIndex - 1);
+            }
+        }
+
+        function jumpToSlide(indexStr) {
+            const idx = parseInt(indexStr, 10);
+            if (!isNaN(idx)) {
+                syncSlideIndex(idx);
+            }
+        }
+
+        // --- CONNECTION MODES ---
+        function startAsScreen() {
+            const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
+            appMode = 'screen';
+            roomRef = db.ref('presentations/' + randomCode);
+
+            roomRef.set({
+                currentSlideIndex: 0,
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+            });
+
+            document.getElementById('connection-modal').classList.add('hidden');
+            document.getElementById('badge-room-code').innerText = randomCode;
+            document.getElementById('screen-room-badge').classList.remove('hidden');
+
+            listenToRoom();
+        }
+
+        function startAsRemote() {
+            const code = document.getElementById('remote-room-code').value.trim();
+            if (code.length !== 4) {
+                alert("Խնդրում ենք մուտքագրել 4-նիշ ID-ն։");
+                return;
+            }
+
+            const testRef = db.ref('presentations/' + code);
+            testRef.once('value', snapshot => {
+                if (!snapshot.exists()) {
+                    alert("Այս ID-ով բացված էկրան չի գտնվել։ Ստուգեք կոդը։");
+                    return;
+                }
+
+                appMode = 'remote';
+                roomRef = testRef;
+
+                document.getElementById('connection-modal').classList.add('hidden');
+                document.getElementById('remote-display-code').innerText = code;
+                document.getElementById('remote-panel').classList.remove('hidden');
+
+                listenToRoom();
+            });
+        }
+
+        function startLocalOnly() {
+            appMode = 'local';
+            document.getElementById('connection-modal').classList.add('hidden');
+            renderSlide();
+        }
+
+        function listenToRoom() {
+            roomRef.on('value', snapshot => {
+                const data = snapshot.val();
+                if (!data) return;
+
+                if (typeof data.currentSlideIndex === 'number' && data.currentSlideIndex !== currentSlideIndex) {
+                    if (data.currentSlideIndex >= 0 && data.currentSlideIndex < slides.length) {
+                        currentSlideIndex = data.currentSlideIndex;
+                        renderSlide();
+                    }
+                }
+            });
+        }
+
+        function toggleBadgeOpacity() {
+            const badge = document.getElementById('screen-room-badge');
+            badgeDimmed = !badgeDimmed;
+            badge.style.opacity = badgeDimmed ? '0.15' : '1';
+        }
+
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        }
+
+        // Ստեղնաշարի կառավարում
+        document.addEventListener('keydown', (e) => {
+            if (!document.getElementById('connection-modal').classList.contains('hidden')) {
+                if (e.key === 'Enter' && document.activeElement.id === 'remote-room-code') {
+                    startAsRemote();
+                }
+                return;
+            }
+
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                e.preventDefault();
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevSlide();
+            }
+        });
+
+        // Խաղի մեկնարկ
+        window.onload = () => {
+            populateRemoteSelect();
+            renderSlide();
+        };
+    </script>
+</body>
+</html>
